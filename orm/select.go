@@ -2,12 +2,14 @@ package orm
 
 import (
 	"context"
-	"reflect"
+	"errors"
+	"fmt"
 	"strings"
 )
 
 type Selector[T any] struct {
 	table string
+	model *model
 	where []Predicate
 	sb    *strings.Builder
 	args  []any
@@ -15,14 +17,17 @@ type Selector[T any] struct {
 
 func (s *Selector[T]) Build() (*Query, error) {
 	s.sb = &strings.Builder{}
+	var err error
+	s.model, err = parseModel(new(T))
+	if err != nil {
+		return nil, err
+	}
 	var sb = s.sb
 	sb.WriteString("SELECT * FROM ")
 
 	if s.table == "" {
-		var t T
-		typ := reflect.TypeOf(t)
 		sb.WriteString("`")
-		sb.WriteString(typ.Name())
+		sb.WriteString(s.model.tableName)
 		sb.WriteString("`")
 	} else {
 		sb.WriteString(s.table)
@@ -66,39 +71,51 @@ func (s *Selector[T]) Where(eq Predicate) QueryBuilder {
 	return s
 }
 
-func (s *Selector[T]) buildExpression(expr Expression) error {
-	// 在这里处理 p
-	// p.left
-	// p.op
-	// p.right
-
-	if expr == nil {
+func (s *Selector[T]) buildExpression(e Expression) error {
+	if e == nil {
 		return nil
 	}
-
-	switch expr := expr.(type) {
-	case Predicate:
-		s.sb.WriteByte('(')
-		err := s.buildExpression(expr.left)
-		if err != nil {
-			return err
-		}
-
-		s.sb.WriteByte(' ')
-		s.sb.WriteString(expr.op.String())
-		s.sb.WriteByte(' ')
-		err = s.buildExpression(expr.right)
-		if err != nil {
-			return err
-		}
-		s.sb.WriteByte(')')
+	switch exp := e.(type) {
 	case Column:
 		s.sb.WriteByte('`')
-		s.sb.WriteString(expr.name)
+
+		f, ok := s.model.fields[exp.name]
+		if !ok {
+			return errors.New("orm: 未知字段")
+		}
+		s.sb.WriteString(f.colName)
 		s.sb.WriteByte('`')
 	case value:
 		s.sb.WriteByte('?')
-		s.addArg(expr.val)
+		s.args = append(s.args, exp.val)
+	case Predicate:
+		_, lp := exp.left.(Predicate)
+		if lp {
+			s.sb.WriteByte('(')
+		}
+		if err := s.buildExpression(exp.left); err != nil {
+			return err
+		}
+		if lp {
+			s.sb.WriteByte(')')
+		}
+
+		s.sb.WriteByte(' ')
+		s.sb.WriteString(exp.op.String())
+		s.sb.WriteByte(' ')
+
+		_, rp := exp.right.(Predicate)
+		if rp {
+			s.sb.WriteByte('(')
+		}
+		if err := s.buildExpression(exp.right); err != nil {
+			return err
+		}
+		if rp {
+			s.sb.WriteByte(')')
+		}
+	default:
+		return fmt.Errorf("orm: 不支持的表达式 %v", exp)
 	}
 	return nil
 }
