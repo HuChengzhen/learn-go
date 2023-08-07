@@ -12,3 +12,7 @@ var (
 func NewErrInvalidTagContent(pair string) error {
 	return fmt.Errorf("orm: 非法标签值 %s", pair)
 }
+
+func NewErrUnknownField(field string) error {
+	return fmt.Errorf("orm: 未知字段 %s", field)
+}

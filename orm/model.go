@@ -11,14 +11,21 @@ const (
 	tagColumn = "column"
 )
 
-type field struct {
+type Registry interface {
+	Get(val any) (*Model, error)
+	Register(val any, opts ...ModelOption) (*Model, error)
+}
+
+type Field struct {
 	// 列名
 	colName string
 }
 
-type model struct {
+type ModelOption func(*Model) error
+
+type Model struct {
 	tableName string
-	fields    map[string]*field
+	fields    map[string]*Field
 }
 
 // var models = map[reflect.Type]*model{}
@@ -32,19 +39,19 @@ func newRegistry() *registry {
 	return &registry{}
 }
 
-func (r *registry) get(val any) (*model, error) {
+func (r *registry) Get(val any) (*Model, error) {
 	typ := reflect.TypeOf(val)
 	m, ok := r.models.Load(typ)
 	if ok {
-		return m.(*model), nil
+		return m.(*Model), nil
 	}
 
-	m, err := r.parseModel(val)
+	m, err := r.Register(val)
 	if err != nil {
 		return nil, err
 	}
 	r.models.Store(typ, m)
-	return m.(*model), nil
+	return m.(*Model), nil
 }
 
 // func (r *registry) get1(val any) (*model, error) {
@@ -73,17 +80,17 @@ func (r *registry) get(val any) (*model, error) {
 // }
 
 // 限制只能用一级指针
-func (r *registry) parseModel(entity any) (*model, error) {
+func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	typ := reflect.TypeOf(entity)
 
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
 		return nil, errs.ErrPointerOnly
 	}
-	typ = typ.Elem()
-	numField := typ.NumField()
-	fieldMap := make(map[string]*field, numField)
+	elemType := typ.Elem()
+	numField := elemType.NumField()
+	fieldMap := make(map[string]*Field, numField)
 	for i := 0; i < numField; i++ {
-		structField := typ.Field(i)
+		structField := elemType.Field(i)
 		pair, err := r.parseTag(structField.Tag)
 
 		if err != nil {
@@ -96,14 +103,52 @@ func (r *registry) parseModel(entity any) (*model, error) {
 			columnName = CamelToSnake(structField.Name)
 		}
 
-		fieldMap[structField.Name] = &field{
+		fieldMap[structField.Name] = &Field{
 			colName: columnName,
 		}
 	}
-	return &model{
-		tableName: CamelToSnake(typ.Name()),
+	var tableName string
+
+	if tbl, ok := entity.(TableName); ok {
+		tableName = tbl.TableName()
+	}
+
+	if tableName == "" {
+		tableName = CamelToSnake(elemType.Name())
+	}
+
+	res := &Model{
+		tableName: tableName,
 		fields:    fieldMap,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		err := opt(res)
+		if err != nil {
+			return nil, err
+		}
+	}
+	r.models.Store(typ, res)
+	return res, nil
+}
+
+func ModelWithTableName(tableName string) ModelOption {
+	return func(m *Model) error {
+		m.tableName = tableName
+
+		return nil
+	}
+}
+
+func ModelWithColumnName(field string, colName string) ModelOption {
+	return func(m *Model) error {
+		f, ok := m.fields[field]
+		if !ok {
+			return errs.NewErrUnknownField(field)
+		}
+		f.colName = colName
+		return nil
+	}
 }
 
 type User struct {
