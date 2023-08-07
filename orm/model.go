@@ -4,6 +4,11 @@ import (
 	"learn_geektime_go/orm/internal/errs"
 	"reflect"
 	"strings"
+	"sync"
+)
+
+const (
+	tagColumn = "column"
 )
 
 type field struct {
@@ -16,25 +21,115 @@ type model struct {
 	fields    map[string]*field
 }
 
+// var models = map[reflect.Type]*model{}
+
+type registry struct {
+	// lock   sync.RWMutex
+	models sync.Map
+}
+
+func newRegistry() *registry {
+	return &registry{}
+}
+
+func (r *registry) get(val any) (*model, error) {
+	typ := reflect.TypeOf(val)
+	m, ok := r.models.Load(typ)
+	if ok {
+		return m.(*model), nil
+	}
+
+	m, err := r.parseModel(val)
+	if err != nil {
+		return nil, err
+	}
+	r.models.Store(typ, m)
+	return m.(*model), nil
+}
+
+// func (r *registry) get1(val any) (*model, error) {
+// 	typ := reflect.TypeOf(val)
+// 	r.lock.RLock()
+// 	m, ok := r.models[typ]
+// 	r.lock.RUnlock()
+// 	if ok {
+// 		return m, nil
+// 	}
+
+// 	r.lock.Lock()
+// 	defer r.lock.Unlock()
+// 	m, ok = r.models[typ]
+// 	if ok {
+// 		return m, nil
+// 	}
+
+// 	m, err := r.parseModel(val)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	r.models[typ] = m
+
+// 	return m, nil
+// }
+
 // 限制只能用一级指针
-func parseModel(entity any) (*model, error) {
+func (r *registry) parseModel(entity any) (*model, error) {
 	typ := reflect.TypeOf(entity)
 
 	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
 		return nil, errs.ErrPointerOnly
 	}
+	typ = typ.Elem()
 	numField := typ.NumField()
 	fieldMap := make(map[string]*field, numField)
 	for i := 0; i < numField; i++ {
 		structField := typ.Field(i)
+		pair, err := r.parseTag(structField.Tag)
+
+		if err != nil {
+			return nil, err
+		}
+
+		columnName := pair[tagColumn]
+
+		if columnName == "" {
+			columnName = CamelToSnake(structField.Name)
+		}
+
 		fieldMap[structField.Name] = &field{
-			colName: CamelToSnake(structField.Name),
+			colName: columnName,
 		}
 	}
 	return &model{
 		tableName: CamelToSnake(typ.Name()),
 		fields:    fieldMap,
 	}, nil
+}
+
+type User struct {
+	ID uint64 `orm:"column=id,xxx=bbb`
+}
+
+func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
+	ormTag, ok := tag.Lookup("orm")
+	if !ok {
+		return map[string]string{}, nil
+	}
+
+	pairs := strings.Split(ormTag, ",")
+
+	res := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		segs := strings.Split(pair, "=")
+		if len(segs) != 2 {
+			return nil, errs.NewErrInvalidTagContent(pair)
+		}
+		key := segs[0]
+		val := segs[1]
+		res[key] = val
+	}
+
+	return res, nil
 }
 
 func CamelToSnake(camel string) (snake string) {

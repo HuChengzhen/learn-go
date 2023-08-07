@@ -1,9 +1,11 @@
 package orm
 
 import (
-	"github.com/stretchr/testify/assert"
 	"learn_geektime_go/orm/internal/errs"
+	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_parseModel(t *testing.T) {
@@ -15,6 +17,56 @@ func Test_parseModel(t *testing.T) {
 	}{
 		{
 			name:   "test model",
+			entity: &TestModel{},
+			wantModel: &model{
+				tableName: "test_model",
+				fields: map[string]*field{
+					"Id": {
+						colName: "id",
+					},
+					"FirstName": {
+						colName: "first_name",
+					},
+					"LastName": {
+						colName: "last_name",
+					},
+					"Age": {
+						colName: "age",
+					},
+				},
+			},
+		},
+		{
+			name:      "error",
+			entity:    TestModel{},
+			wantModel: nil,
+			wantErr:   errs.ErrPointerOnly,
+		},
+	}
+
+	r := &registry{}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m, err := r.parseModel(tc.entity)
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantModel, m)
+		})
+	}
+}
+
+func TestRegistry_get(t *testing.T) {
+	testCases := []struct {
+		name      string
+		entity    any
+		wantModel *model
+		wantErr   error
+		cacheSize int
+	}{
+		{
+			name:   "testModel",
 			entity: &TestModel{},
 			wantModel: &model{
 				tableName: "test_model",
@@ -33,23 +85,72 @@ func Test_parseModel(t *testing.T) {
 					},
 				},
 			},
+			wantErr:   nil,
+			cacheSize: 1,
 		},
 		{
-			name:      "error",
-			entity:    TestModel{},
-			wantModel: nil,
-			wantErr:   errs.ErrPointerOnly,
+			name: "tag",
+			entity: func() any {
+				type TagTable struct {
+					FirstName string `orm:"column=first_name_t"`
+				}
+
+				return new(TagTable)
+			}(),
+			wantModel: &model{
+				tableName: "tag_table",
+				fields: map[string]*field{
+					"FirstName": {
+						colName: "first_name_t",
+					},
+				},
+			},
+		},
+		{
+			name: "empty tag",
+			entity: func() any {
+				type TagTable struct {
+					FirstName string `orm:"column="`
+				}
+
+				return new(TagTable)
+			}(),
+			wantModel: &model{
+				tableName: "tag_table",
+				fields: map[string]*field{
+					"FirstName": {
+						colName: "first_name",
+					},
+				},
+			},
+		},
+		{
+			name: "no tag",
+			entity: func() any {
+				type TagTable struct {
+					FirstName string `orm:"column"`
+				}
+
+				return new(TagTable)
+			}(),
+			wantErr: errs.NewErrInvalidTagContent("column"),
 		},
 	}
 
+	r := newRegistry()
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := parseModel(tc.entity)
+			m, err := r.get(tc.entity)
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
 			}
 			assert.Equal(t, tc.wantModel, m)
+			typ := reflect.TypeOf(tc.entity)
+			m2, ok := r.models.Load(typ)
+			assert.True(t, ok)
+			assert.Equal(t, tc.wantModel, m2)
 		})
 	}
 }
