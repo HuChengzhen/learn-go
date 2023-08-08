@@ -1,9 +1,5 @@
 package orm
 
-import (
-	"database/sql"
-)
-
 // func TestSlectorBuilder(t *testing.T) {
 // 	db, err := NewDB()
 // 	require.NoError(t, err)
@@ -78,9 +74,9 @@ import (
 // 	}
 // }
 
-type TestModel struct {
-	Id        int64
-	FirstName string
-	Age       int8
-	LastName  *sql.NullString
-}
+// type TestModel struct {
+// 	Id        int64
+// 	FirstName string
+// 	Age       int8
+// 	LastName  *sql.NullString
+// }

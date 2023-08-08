@@ -27,3 +27,10 @@ type Query struct {
 type TableName interface {
 	TableName() string
 }
+
+type TestModel struct {
+	Id        int64
+	FirstName string
+	Age       int8
+	LastName  string
+}
