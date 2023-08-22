@@ -1,7 +1,7 @@
 package orm
 
 // func TestSlectorBuilder(t *testing.T) {
-// 	db, err := NewDB()
+// 	db, err := Open()
 // 	require.NoError(t, err)
 // 	testCases := []struct {
 // 		name      string

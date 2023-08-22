@@ -2,8 +2,10 @@ package orm
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -65,13 +67,71 @@ func (s *Selector[T]) From(table string) *Selector[T] {
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
-	//TODO implement me
-	panic("implement me")
+	build, err := s.Build()
+	if err != nil {
+		return nil, err
+	}
+	var db *sql.DB
+	db = s.db.db
+
+	rows, err := db.QueryContext(ctx, build.SQL, build.Args...)
+	if err != nil {
+		return nil, err
+	}
+
+	if !rows.Next() {
+		// 返回error和sql包语义一致。
+
+	}
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	tp := new(T)
+
+	var vals []any
+	vals = make([]any, len(columns))
+
+	for _, column := range columns {
+		for _, field := range s.model.fields {
+			if field.colName == column {
+				val := reflect.New(field.typ)
+				vals = append(vals, val.Interface())
+			}
+		}
+	}
+
+	rows.Scan(vals...)
+
+	tpValue := reflect.ValueOf(tp)
+	for i, column := range columns {
+		for key, field := range s.model.fields {
+			if field.colName == column {
+				tpValue.Elem().FieldByName(key).Set(reflect.ValueOf(vals[i]).Elem())
+			}
+		}
+	}
+
+	return tp, err
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
-	//TODO implement me
-	panic("implement me")
+	build, err := s.Build()
+	if err != nil {
+		return nil, err
+	}
+	var db *sql.DB
+	db = s.db.db
+	_, err = db.QueryContext(ctx, build.SQL, build.Args...)
+	if err != nil {
+		return nil, err
+	}
+	//for _, r := range rows {
+
+	//}
+	return nil, nil
 }
 
 func (s *Selector[T]) Where(eq Predicate) QueryBuilder {

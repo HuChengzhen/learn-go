@@ -19,6 +19,7 @@ type Registry interface {
 type Field struct {
 	// 列名
 	colName string
+	typ     reflect.Type
 }
 
 type ModelOption func(*Model) error
@@ -105,6 +106,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 
 		fieldMap[structField.Name] = &Field{
 			colName: columnName,
+			typ:     structField.Type,
 		}
 	}
 	var tableName string
