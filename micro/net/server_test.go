@@ -2,17 +2,15 @@ package net
 
 import (
 	"errors"
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/assert"
 	"learn_geektime_go/micro/net/mocks"
 	"net"
 	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_handleConn(t *testing.T) {
-	type args struct {
-		conn net.Conn
-	}
 	tests := []struct {
 		name    string
 		mock    func(ctrl *gomock.Controller) net.Conn
