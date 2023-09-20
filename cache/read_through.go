@@ -3,8 +3,9 @@ package cache
 import (
 	"context"
 	"errors"
-	"golang.org/x/sync/singleflight"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type ReadThroughCache struct {

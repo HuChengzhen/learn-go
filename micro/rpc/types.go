@@ -1,14 +1,14 @@
 package rpc
 
-import "context"
+import (
+	"context"
+	"learn_geektime_go/micro/rpc/message"
+)
 
 type Service interface {
 	Name() string
 }
 
 type Proxy interface {
-	Invoke(ctx context.Context, req *Request) (*Response, error)
-}
-
-type Response struct {
+	Invoke(ctx context.Context, req *message.Request) (*message.Response, error)
 }
